@@ -1,9 +1,10 @@
 -module(estripe).
 
--export([create_customer/3]).
+-export([create_customer/3, create_customer/2]).
 -export([update_customer/2]).
 -export([delete_customer/1]).
 -export([get_customer/1, get_customer/2]).
+-export([list_all_customers/0]).
 -export([update_subscription/3, update_subscription/4]).
 -export([cancel_subscription/1]).
 
@@ -23,6 +24,9 @@
 -export([charge_amount/1]).
 -export([charge_id/1]).
 
+-export([create_card/2,
+         update_card/3]).
+
 -define(HTTP_TIMEOUT, 10000).
 -define(CHARGES_PAGE_SIZE, 100).
 
@@ -37,6 +41,8 @@ handle_customer_response({ok, {{200, _}, _, Json}}) ->
     {ok, jiffy:decode(Json)};
 handle_customer_response({ok, {{402, "Payment Required"}, _, _}}) ->
     {error, payment_required};
+handle_customer_response({ok, ErrorDescription}) ->
+    {error, {custome_error, ErrorDescription}};
 handle_customer_response({error, Error}) ->
     {error, Error}.
 
@@ -50,6 +56,20 @@ create_customer(Token, PlanId, Quantity) ->
         {<<"card">>, Token},
         {<<"plan">>, PlanId},
         {<<"quantity">>, list_to_binary(integer_to_list(Quantity))}
+    ],
+    Body = form_urlencode(Params),
+    handle_customer_response(lhttpc:request(
+        "https://api.stripe.com/v1/customers",
+        "POST",
+        [authorization()],
+        Body,
+        ?HTTP_TIMEOUT
+    )).
+
+create_customer(Description, Email) ->
+    Params = [
+        {<<"description">>, Description}, 
+        {<<"email">>,       Email}
     ],
     Body = form_urlencode(Params),
     handle_customer_response(lhttpc:request(
@@ -90,6 +110,14 @@ get_customer(CustomerId, StripeKey) ->
 get_customer(CustomerId) when is_binary(CustomerId) ->
     {ok, StripeKey} = application:get_env(estripe, stripe_key),
     get_customer(CustomerId, StripeKey).
+
+list_all_customers() ->
+    handle_customer_response(lhttpc:request(
+        "https://api.stripe.com/v1/customers",
+        "GET",
+        [authorization()],
+        ?HTTP_TIMEOUT
+    )).
 
 handle_subscription_response({ok, {{200, _}, _, Json}}) ->
     {ok, jiffy:decode(Json)};
@@ -256,3 +284,27 @@ form_urlencode([{Key, Value} | R], Acc) when is_list(Key), is_list(Value) ->
     form_urlencode(R, [esc(Key) ++ "=" ++ esc(Value) | Acc]).
 
 esc(S) -> http_uri:encode(S).
+
+
+create_card(CustomerId, CardId) ->
+    Params = [
+        {<<"card">>, CardId}
+    ],
+    Body = form_urlencode(Params),
+    handle_customer_response(lhttpc:request(
+        "https://api.stripe.com/v1/customers/"++ binary_to_list(CustomerId)++"/cards",
+        "POST",
+        [authorization()],
+        Body,
+        ?HTTP_TIMEOUT
+    )).
+
+update_card(CustomerId, CardId, Params) ->
+    Body = form_urlencode(Params),
+    handle_customer_response(lhttpc:request(
+        "https://api.stripe.com/v1/customers/"++ binary_to_list(CustomerId)++"/cards/"++ binary_to_list(CardId),
+        "POST",
+        [authorization()],
+        Body,
+        ?HTTP_TIMEOUT
+    )).
