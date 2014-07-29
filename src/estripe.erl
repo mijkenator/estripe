@@ -25,7 +25,8 @@
 -export([charge_id/1]).
 
 -export([create_card/2,
-         update_card/3]).
+         update_card/3,
+         charge/4]).
 
 -define(HTTP_TIMEOUT, 10000).
 -define(CHARGES_PAGE_SIZE, 100).
@@ -308,3 +309,19 @@ update_card(CustomerId, CardId, Params) ->
         Body,
         ?HTTP_TIMEOUT
     )).
+
+charge(Amount, Currency, Card, Options) ->
+    Params = [
+        {<<"amount">>, Amount},
+        {<<"currency">>, Currency},
+        {<<"card">>, Card}
+    ] ++ Options,
+    Body = form_urlencode(Params),
+    handle_customer_response(lhttpc:request(
+        "https://api.stripe.com/v1/charges",
+        "POST",
+        [authorization()],
+        Body,
+        ?HTTP_TIMEOUT
+    )).
+    
